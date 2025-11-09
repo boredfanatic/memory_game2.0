@@ -31,7 +31,7 @@ export default function ModeSelectionScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#230486", // purple like your design
+    backgroundColor: "#230486",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -50,10 +50,10 @@ const styles = StyleSheet.create({
     marginVertical: 15,
   },
   easyButton: {
-    backgroundColor: "#4CAF50", // green
+    backgroundColor: "#4CAF50",
   },
   hardButton: {
-    backgroundColor: "#F44336", // red
+    backgroundColor: "#F44336",
   },
   buttonText: {
     fontSize: 20,
