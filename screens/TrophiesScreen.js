@@ -1,6 +1,16 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, Dimensions, Alert } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Dimensions,
+  Alert,
+  Animated,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import ConfettiCannon from "react-native-confetti-cannon";
 
 const STICKERS = [
   { key: "swiss_cheese", name: "Swiss Cheese", image: require("../assets/images/swiss_cheese.png"), type: "combined", easyThreshold: 700, hardThreshold: 300, rank: "Bronze" },
@@ -12,6 +22,7 @@ const STICKERS = [
 ];
 
 const STORAGE_KEY = "@sticker_unlocks";
+const ANIMATED_KEY = "@unlock_animations_done";
 const screenWidth = Dimensions.get("window").width;
 
 const STICKER_COLORS = {
@@ -24,101 +35,111 @@ const STICKER_COLORS = {
 
 export default function TrophiesScreen({ navigation }) {
   const [unlocks, setUnlocks] = useState({});
+  const [animDone, setAnimDone] = useState({});
 
   useEffect(() => {
-    const fetchUnlocks = async () => {
+    const fetchData = async () => {
       const saved = await AsyncStorage.getItem(STORAGE_KEY);
-      setUnlocks(saved ? JSON.parse(saved) : {});
+      const savedAnim = await AsyncStorage.getItem(ANIMATED_KEY);
+      const unlockData = saved ? JSON.parse(saved) : {};
+      const animData = savedAnim ? JSON.parse(savedAnim) : {};
+      setUnlocks(unlockData);
+      setAnimDone(animData);
+
+      // Compute newly unlocked stickers
+      const newUnlocks = STICKERS.filter(
+        s =>
+          isStickerUnlockedStatic(s, unlockData) &&
+          !animData[s.key]
+      );
+
+      // Animate sequentially
+      newUnlocks.forEach((sticker, index) => {
+        setTimeout(() => {
+          animRefs[sticker.key]?.current?.startUnlockAnimation();
+        }, index * 1500); // 1.5s between unlocks
+      });
     };
-    fetchUnlocks();
+    fetchData();
   }, []);
 
-  const isStickerUnlocked = (sticker) => {
+  const saveAnimState = async (key) => {
+    const updated = { ...animDone, [key]: true };
+    setAnimDone(updated);
+    await AsyncStorage.setItem(ANIMATED_KEY, JSON.stringify(updated));
+  };
+
+  const isStickerUnlockedStatic = (sticker, unlockData) => {
     if (sticker.type === "combined") {
-      return (unlocks.easyScore ?? 0) >= sticker.easyThreshold &&
-             (unlocks.hardScore ?? 0) >= sticker.hardThreshold;
+      return (
+        (unlockData.easyScore ?? 0) >= sticker.easyThreshold &&
+        (unlockData.hardScore ?? 0) >= sticker.hardThreshold
+      );
     }
     if (sticker.type === "special") {
       return sticker.mode === "easy"
-        ? unlocks.lowestEasyAchieved ?? false
-        : unlocks.lowestDifficultAchieved ?? false;
+        ? unlockData.lowestEasyAchieved ?? false
+        : unlockData.lowestDifficultAchieved ?? false;
     }
     return false;
   };
 
-  // Hide special stickers until unlocked
-  const visibleStickers = STICKERS.filter((s) => {
-    if (s.type === "special" && !isStickerUnlocked(s)) return false;
-    return true;
-  });
+  const isStickerUnlocked = (sticker) => isStickerUnlockedStatic(sticker, unlocks);
 
-  const getStickerColor = (sticker) => {
-    if (sticker.type === "special") return STICKER_COLORS.Special;
-    return STICKER_COLORS[sticker.rank] ?? "#000";
-  };
+  const getStickerColor = (sticker) =>
+    sticker.type === "special"
+      ? STICKER_COLORS.Special
+      : STICKER_COLORS[sticker.rank] ?? "#000";
 
-  const renderSticker = ({ item }) => {
-    const unlocked = isStickerUnlocked(item);
-    return (
-      <View style={styles.stickerContainer}>
-        <Image
-          source={item.image}
-          style={[
-            styles.stickerImage,
-            { opacity: unlocked ? 1 : 0.3, borderColor: unlocked ? "#FFD700" : "#aaa" },
-          ]}
-          resizeMode="contain"
-        />
-        <Text
-          style={
-            unlocked
-              ? { color: getStickerColor(item), fontWeight: "bold", fontSize: 16, textAlign: "center" }
-              : styles.stickerNameLocked
-          }
-        >
-          {item.name}
-        </Text>
-        {item.type === "special" && unlocked && (
-          <Text style={[styles.secretText, { color: STICKER_COLORS.Special }]}>Secret</Text>
-        )}
-        {unlocked && item.rank && (
-          <Text style={[styles.rankText, { color: getStickerColor(item) }]}>{item.rank}</Text>
-        )}
-      </View>
-    );
-  };
-
-  const clearProgress = async () => {
-    Alert.alert(
-      "Clear Progress",
-      "Are you sure you want to clear all progress? This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Yes",
-          onPress: async () => {
-            await AsyncStorage.removeItem(STORAGE_KEY);
-            setUnlocks({});
-          },
-        },
-      ]
-    );
-  };
+  // Refs for triggering animations
+  const animRefs = {};
+  STICKERS.forEach(s => (animRefs[s.key] = useRef(null)));
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Your Stickers</Text>
-      <FlatList
-        data={visibleStickers}
-        keyExtractor={(item) => item.key}
-        numColumns={2}
-        renderItem={renderSticker}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.gridContainer}
-      />
-      <TouchableOpacity style={styles.button} onPress={clearProgress}>
+
+      <View style={styles.grid}>
+        {STICKERS.map((item) => {
+          const unlocked = isStickerUnlocked(item);
+          return (
+            <StickerCard
+              key={item.key}
+              ref={animRefs[item.key]}
+              sticker={item}
+              unlocked={unlocked}
+              alreadyAnimated={animDone[item.key]}
+              onAnimationComplete={() => saveAnimState(item.key)}
+              getStickerColor={getStickerColor}
+            />
+          );
+        })}
+      </View>
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => {
+          Alert.alert(
+            "Clear Progress",
+            "Are you sure you want to clear all progress? This cannot be undone.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Yes",
+                onPress: async () => {
+                  await AsyncStorage.removeItem(STORAGE_KEY);
+                  await AsyncStorage.removeItem(ANIMATED_KEY);
+                  setUnlocks({});
+                  setAnimDone({});
+                },
+              },
+            ]
+          );
+        }}
+      >
         <Text style={styles.buttonText}>Clear Progress</Text>
       </TouchableOpacity>
+
       <TouchableOpacity
         style={[styles.button, { marginTop: 10 }]}
         onPress={() => navigation.navigate("Start")}
@@ -129,29 +150,79 @@ export default function TrophiesScreen({ navigation }) {
   );
 }
 
+// StickerCard with unlock animation
+const StickerCard = React.forwardRef(({ sticker, unlocked, alreadyAnimated, onAnimationComplete, getStickerColor }, ref) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const unlockOpacity = useRef(new Animated.Value(1)).current;
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  const [wasUnlocked, setWasUnlocked] = useState(alreadyAnimated);
+
+  useEffect(() => {
+    if (unlocked && !wasUnlocked && alreadyAnimated) {
+      setWasUnlocked(true); // prevent re-animation
+    }
+  }, []);
+
+  React.useImperativeHandle(ref, () => ({
+    startUnlockAnimation: () => {
+      if (!unlocked || wasUnlocked) return;
+
+      setWasUnlocked(true);
+      setShowConfetti(true);
+
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: 5, duration: 100, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -5, duration: 100, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1.3, friction: 3, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }),
+        Animated.timing(unlockOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start(() => {
+        setShowConfetti(false);
+        onAnimationComplete?.();
+      });
+    }
+  }));
+
+  const translateX = shakeAnim.interpolate({ inputRange: [-5, 5], outputRange: [-5, 5] });
+
+  return (
+    <Animated.View style={[styles.stickerContainer, { transform: [{ translateX }, { scale: scaleAnim }] }]}>
+      <View>
+        <Image
+          source={sticker.image}
+          style={[styles.stickerImage, { opacity: unlocked ? 1 : 0.25, borderColor: unlocked ? "#FFD700" : "#666" }]}
+        />
+        {!unlocked && <Image source={require("../assets/lock.png")} style={styles.lockOverlay} />}
+        {unlocked && !alreadyAnimated && (
+          <Animated.Image source={require("../assets/unlock.png")} style={[styles.lockOverlay, { opacity: unlockOpacity }]} />
+        )}
+      </View>
+
+      <Text style={[styles.stickerText, unlocked ? { color: getStickerColor(sticker) } : { color: "#888" }]}>
+        {sticker.name}
+      </Text>
+
+      {sticker.type === "special" && unlocked && <Text style={[styles.secretText, { color: STICKER_COLORS.Special }]}>Secret</Text>}
+      {unlocked && sticker.rank && <Text style={[styles.rankText, { color: getStickerColor(sticker) }]}>{sticker.rank}</Text>}
+
+      {showConfetti && <ConfettiCannon count={50} origin={{ x: screenWidth / 2, y: -10 }} fadeOut />}
+    </Animated.View>
+  );
+});
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#230486", alignItems: "center", paddingTop: 50 },
   title: { fontSize: 28, fontWeight: "bold", marginBottom: 20, color: "#fff" },
-  gridContainer: { alignItems: "center", justifyContent: "center", paddingBottom: 40 },
-  row: { justifyContent: "space-evenly", width: "100%" },
-  stickerContainer: { alignItems: "center", justifyContent: "center", marginVertical: 20 },
-  stickerImage: {
-    width: screenWidth / 2.8,
-    height: screenWidth / 2.8,
-    borderWidth: 2,
-    borderRadius: 16,
-    marginBottom: 6,
-  },
-  stickerNameLocked: { fontWeight: "bold", color: "#888", fontSize: 16, textAlign: "center" },
-  secretText: { fontSize: 14, fontWeight: "bold", marginTop: 2 },
-  rankText: { fontSize: 14, fontWeight: "bold", marginTop: 2 },
-  button: {
-    backgroundColor: "#9A3EC6",
-    padding: 15,
-    borderRadius: 12,
-    marginTop: 20,
-    width: "60%",
-    alignItems: "center",
-  },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-evenly", alignItems: "center", width: "100%", paddingHorizontal: 10, marginBottom: 20 },
+  stickerContainer: { alignItems: "center", justifyContent: "center", marginVertical: 10, width: screenWidth / 3 - 10 },
+  stickerImage: { width: screenWidth / 3.5, height: screenWidth / 3.5, borderWidth: 2, borderRadius: 16, marginBottom: 4 },
+  lockOverlay: { position: "absolute", top: "25%", left: "25%", width: "50%", height: "50%" },
+  stickerText: { fontWeight: "bold", fontSize: 14, textAlign: "center" },
+  secretText: { fontSize: 13, fontWeight: "bold", marginTop: 1 },
+  rankText: { fontSize: 13, fontWeight: "bold", marginTop: 1 },
+  button: { backgroundColor: "#9A3EC6", padding: 14, borderRadius: 12, marginTop: 10, width: "60%", alignItems: "center" },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
 });
