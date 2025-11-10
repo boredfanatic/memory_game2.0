@@ -13,10 +13,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ConfettiCannon from "react-native-confetti-cannon";
 
 const STICKERS = [
-  { key: "swiss_cheese", name: "Swiss Cheese", image: require("../assets/images/swiss_cheese.png"), type: "combined", easyThreshold: 700, hardThreshold: 300, rank: "Bronze" },
-  { key: "apple", name: "Apple", image: require("../assets/images/apple.png"), type: "combined", easyThreshold: 850, hardThreshold: 500, rank: "Silver" },
-  { key: "kitty", name: "Kitty", image: require("../assets/images/kitty.png"), type: "combined", easyThreshold: 1000, hardThreshold: 750, rank: "Gold" },
-  { key: "magic_wand", name: "Magic Wand", image: require("../assets/images/magic_wand.png"), type: "combined", easyThreshold: 1150, hardThreshold: 1000, rank: "Diamond" },
+  { key: "swiss_cheese", name: "Swiss Cheese", image: require("../assets/images/swiss_cheese.png"), type: "combined", easyThreshold: 1000, hardThreshold: 800, rank: "Bronze" },
+  { key: "apple", name: "Apple", image: require("../assets/images/apple.png"), type: "combined", easyThreshold: 1080, hardThreshold: 880, rank: "Silver" },
+  { key: "kitty", name: "Kitty", image: require("../assets/images/kitty.png"), type: "combined", easyThreshold: 1160, hardThreshold: 960, rank: "Gold" },
+  { key: "magic_wand", name: "Magic Wand", image: require("../assets/images/magic_wand.png"), type: "combined", easyThreshold: 1200, hardThreshold: 1000, rank: "Diamond" },
   { key: "penguin", name: "Penguin", image: require("../assets/images/penguin.png"), type: "special", mode: "easy" },
   { key: "ember_flower", name: "Ember Flower", image: require("../assets/images/fire_flower.png"), type: "special", mode: "difficult" },
 ];
@@ -37,6 +37,10 @@ export default function TrophiesScreen({ navigation }) {
   const [unlocks, setUnlocks] = useState({});
   const [animDone, setAnimDone] = useState({});
 
+  // Refs to trigger animation on stickers
+  const animRefs = {};
+  STICKERS.forEach((s) => (animRefs[s.key] = useRef(null)));
+
   useEffect(() => {
     const fetchData = async () => {
       const saved = await AsyncStorage.getItem(STORAGE_KEY);
@@ -46,18 +50,16 @@ export default function TrophiesScreen({ navigation }) {
       setUnlocks(unlockData);
       setAnimDone(animData);
 
-      // Compute newly unlocked stickers
+      // Determine newly unlocked stickers
       const newUnlocks = STICKERS.filter(
-        s =>
-          isStickerUnlockedStatic(s, unlockData) &&
-          !animData[s.key]
+        (s) => isStickerUnlockedStatic(s, unlockData) && !animData[s.key]
       );
 
-      // Animate sequentially
+      // Animate sequentially with 1.5s between stickers
       newUnlocks.forEach((sticker, index) => {
         setTimeout(() => {
           animRefs[sticker.key]?.current?.startUnlockAnimation();
-        }, index * 1500); // 1.5s between unlocks
+        }, index * 1500);
       });
     };
     fetchData();
@@ -84,16 +86,13 @@ export default function TrophiesScreen({ navigation }) {
     return false;
   };
 
-  const isStickerUnlocked = (sticker) => isStickerUnlockedStatic(sticker, unlocks);
+  const isStickerUnlocked = (sticker) =>
+    isStickerUnlockedStatic(sticker, unlocks);
 
   const getStickerColor = (sticker) =>
     sticker.type === "special"
       ? STICKER_COLORS.Special
       : STICKER_COLORS[sticker.rank] ?? "#000";
-
-  // Refs for triggering animations
-  const animRefs = {};
-  STICKERS.forEach(s => (animRefs[s.key] = useRef(null)));
 
   return (
     <View style={styles.container}>
@@ -150,73 +149,106 @@ export default function TrophiesScreen({ navigation }) {
   );
 }
 
-// StickerCard with unlock animation
-const StickerCard = React.forwardRef(({ sticker, unlocked, alreadyAnimated, onAnimationComplete, getStickerColor }, ref) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-  const unlockOpacity = useRef(new Animated.Value(1)).current;
-  const [showConfetti, setShowConfetti] = useState(false);
+// StickerCard component with sequential unlock animation
+const StickerCard = React.forwardRef(
+  ({ sticker, unlocked, alreadyAnimated, onAnimationComplete, getStickerColor }, ref) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const shakeAnim = useRef(new Animated.Value(0)).current;
+    const unlockOpacity = useRef(new Animated.Value(1)).current;
+    const [showConfetti, setShowConfetti] = useState(false);
 
-  const [wasUnlocked, setWasUnlocked] = useState(alreadyAnimated);
+    const [wasUnlocked, setWasUnlocked] = useState(alreadyAnimated);
 
-  useEffect(() => {
-    if (unlocked && !wasUnlocked && alreadyAnimated) {
-      setWasUnlocked(true); // prevent re-animation
-    }
-  }, []);
+    useEffect(() => {
+      if (unlocked && !wasUnlocked && alreadyAnimated) {
+        setWasUnlocked(true);
+      }
+    }, []);
 
-  React.useImperativeHandle(ref, () => ({
-    startUnlockAnimation: () => {
-      if (!unlocked || wasUnlocked) return;
+    React.useImperativeHandle(ref, () => ({
+      startUnlockAnimation: () => {
+        if (!unlocked || wasUnlocked) return;
 
-      setWasUnlocked(true);
-      setShowConfetti(true);
+        setWasUnlocked(true);
+        setShowConfetti(true);
 
-      Animated.sequence([
-        Animated.timing(shakeAnim, { toValue: 5, duration: 100, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -5, duration: 100, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1.3, friction: 3, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }),
-        Animated.timing(unlockOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]).start(() => {
-        setShowConfetti(false);
-        onAnimationComplete?.();
-      });
-    }
-  }));
+        const sequence = [
+          Animated.timing(shakeAnim, { toValue: 5, duration: 100, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -5, duration: 100, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+          Animated.spring(scaleAnim, { toValue: 1.3, friction: 3, useNativeDriver: true }),
+          Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }),
+          Animated.timing(unlockOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ];
 
-  const translateX = shakeAnim.interpolate({ inputRange: [-5, 5], outputRange: [-5, 5] });
+        const runStep = (index) => {
+          if (index >= sequence.length) {
+            setShowConfetti(false);
+            onAnimationComplete?.();
+            return;
+          }
+          sequence[index].start(() => setTimeout(() => runStep(index + 1), 500));
+        };
 
-  return (
-    <Animated.View style={[styles.stickerContainer, { transform: [{ translateX }, { scale: scaleAnim }] }]}>
-      <View>
-        <Image
-          source={sticker.image}
-          style={[styles.stickerImage, { opacity: unlocked ? 1 : 0.25, borderColor: unlocked ? "#FFD700" : "#666" }]}
-        />
-        {!unlocked && <Image source={require("../assets/lock.png")} style={styles.lockOverlay} />}
-        {unlocked && !alreadyAnimated && (
-          <Animated.Image source={require("../assets/unlock.png")} style={[styles.lockOverlay, { opacity: unlockOpacity }]} />
+        runStep(0);
+      },
+    }));
+
+    const translateX = shakeAnim.interpolate({
+      inputRange: [-5, 5],
+      outputRange: [-5, 5],
+    });
+
+    return (
+      <Animated.View
+        style={[styles.stickerContainer, { transform: [{ translateX }, { scale: scaleAnim }] }]}
+      >
+        <View>
+          <Image
+            source={sticker.image}
+            style={[
+              styles.stickerImage,
+              { opacity: unlocked ? 1 : 0.25, borderColor: unlocked ? "#FFD700" : "#666" },
+            ]}
+          />
+          {!unlocked && <Image source={require("../assets/lock.png")} style={styles.lockOverlay} />}
+          {unlocked && !alreadyAnimated && (
+            <Animated.Image
+              source={require("../assets/unlock.png")}
+              style={[styles.lockOverlay, { opacity: unlockOpacity }]}
+            />
+          )}
+        </View>
+
+        <Text style={[styles.stickerText, { color: unlocked ? getStickerColor(sticker) : "#888" }]}>
+          {sticker.name}
+        </Text>
+
+        {sticker.type === "special" && unlocked && (
+          <Text style={[styles.secretText, { color: STICKER_COLORS.Special }]}>Secret</Text>
         )}
-      </View>
+        {unlocked && sticker.rank && (
+          <Text style={[styles.rankText, { color: getStickerColor(sticker) }]}>{sticker.rank}</Text>
+        )}
 
-      <Text style={[styles.stickerText, unlocked ? { color: getStickerColor(sticker) } : { color: "#888" }]}>
-        {sticker.name}
-      </Text>
-
-      {sticker.type === "special" && unlocked && <Text style={[styles.secretText, { color: STICKER_COLORS.Special }]}>Secret</Text>}
-      {unlocked && sticker.rank && <Text style={[styles.rankText, { color: getStickerColor(sticker) }]}>{sticker.rank}</Text>}
-
-      {showConfetti && <ConfettiCannon count={50} origin={{ x: screenWidth / 2, y: -10 }} fadeOut />}
-    </Animated.View>
-  );
-});
+        {showConfetti && <ConfettiCannon count={50} origin={{ x: screenWidth / 2, y: -10 }} fadeOut />}
+      </Animated.View>
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#230486", alignItems: "center", paddingTop: 50 },
   title: { fontSize: 28, fontWeight: "bold", marginBottom: 20, color: "#fff" },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-evenly", alignItems: "center", width: "100%", paddingHorizontal: 10, marginBottom: 20 },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-evenly",
+    alignItems: "center",
+    width: "100%",
+    paddingHorizontal: 10,
+    marginBottom: 20,
+  },
   stickerContainer: { alignItems: "center", justifyContent: "center", marginVertical: 10, width: screenWidth / 3 - 10 },
   stickerImage: { width: screenWidth / 3.5, height: screenWidth / 3.5, borderWidth: 2, borderRadius: 16, marginBottom: 4 },
   lockOverlay: { position: "absolute", top: "25%", left: "25%", width: "50%", height: "50%" },
