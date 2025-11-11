@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, Pressable, StyleSheet, Image, Animated } from "react-native";
+import { View, Text, Pressable, StyleSheet, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Images
@@ -28,7 +28,7 @@ const CARD_IMAGES = [
   { name: "Swiss Cheese", img: swissCheeseImg },
 ];
 
-const TILE_BG = "#9A3EC6"; // Card back color
+const TILE_BG = "#9A3EC6";
 
 function shuffleArray(array) {
   const arr = [...array, ...array];
@@ -55,7 +55,6 @@ export default function GameScreen({ navigation, route }) {
       ...value,
       flipped: false,
       matched: false,
-      anim: new Animated.Value(0),
     }))
   );
   const [matches, setMatches] = useState(0);
@@ -65,7 +64,6 @@ export default function GameScreen({ navigation, route }) {
   const elapsedRef = useRef(0);
   const firstCardRef = useRef(null);
   const isCheckingRef = useRef(false);
-  const tapQueueRef = useRef([]); // store all taps
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -87,85 +85,6 @@ export default function GameScreen({ navigation, route }) {
     }, 1000);
     return () => clearInterval(timerRef.current);
   }, []);
-
-  const flipCard = (card, toFront = true) => {
-    Animated.timing(card.anim, {
-      toValue: toFront ? 180 : 0,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  // ----------------- INSTANT TAP QUEUE -----------------
-  const handleCardPress = (index) => {
-    tapQueueRef.current.push(index); // store every tap immediately
-    processTapQueue();
-  };
-
-  const processTapQueue = () => {
-    if (tapQueueRef.current.length === 0) return;
-
-    const index = tapQueueRef.current.shift();
-    const currentCards = [...cards];
-    const card = currentCards[index];
-
-    if (!card || card.flipped || card.matched) {
-      processTapQueue(); // skip invalid card
-      return;
-    }
-
-    // flip immediately
-    card.flipped = true;
-    setCards(currentCards);
-    flipCard(card, true);
-
-    // store first card if none selected
-    if (!firstCardRef.current) {
-      firstCardRef.current = { ...card, index };
-      processTapQueue(); // continue processing queue immediately
-      return;
-    }
-
-    // second card selected
-    isCheckingRef.current = true;
-    const first = firstCardRef.current;
-    firstCardRef.current = null;
-
-    setTimeout(() => {
-      const updated = [...currentCards];
-      const secondCard = updated[index];
-
-      if (first.name === secondCard.name) {
-        updated[first.index].matched = true;
-        updated[index].matched = true;
-        setMatches((prev) => prev + 1);
-
-        const points =
-          MATCH_REWARD[isEasyMode ? "easy" : "difficult"][
-            errors === 0 ? "firstTry" : "afterError"
-          ];
-
-        setScore((prevScore) => {
-          const newScore = prevScore + points;
-          if (matches + 1 === CARD_IMAGES.length) {
-            clearInterval(timerRef.current);
-            handleWin(newScore);
-          }
-          return newScore;
-        });
-      } else {
-        updated[first.index].flipped = false;
-        updated[index].flipped = false;
-        flipCard(updated[first.index], false);
-        flipCard(updated[index], false);
-        setErrors((prev) => prev + 1);
-      }
-
-      setCards(updated);
-      isCheckingRef.current = false;
-      processTapQueue(); // process next tap immediately
-    }, 400);
-  };
 
   const handleWin = async (finalScore) => {
     clearInterval(timerRef.current);
@@ -252,30 +171,79 @@ export default function GameScreen({ navigation, route }) {
     }
   };
 
-  const RenderCard = ({ card, index }) => {
-    const rotateY = card.anim.interpolate({
-      inputRange: [0, 180],
-      outputRange: ["0deg", "180deg"],
+  // ------------------------ CARD PRESS ------------------------
+  const handleCardPress = (index) => {
+    if (isCheckingRef.current) return;
+
+    setCards((prev) => {
+      const updated = [...prev];
+      const card = updated[index];
+      if (!card || card.flipped || card.matched) return prev;
+      updated[index] = { ...card, flipped: true };
+      return updated;
     });
 
-    const isFace = card.flipped || card.matched;
+    if (firstCardRef.current === null) {
+      firstCardRef.current = index;
+      return;
+    }
 
+    isCheckingRef.current = true;
+    const firstIndex = firstCardRef.current;
+    firstCardRef.current = null;
+
+    setTimeout(() => {
+      setCards((prevNow) => {
+        const newCards = [...prevNow];
+        const firstCard = newCards[firstIndex];
+        const secondCard = newCards[index];
+
+        if (firstCard.name === secondCard.name) {
+          newCards[firstIndex].matched = true;
+          newCards[index].matched = true;
+          setMatches((m) => m + 1);
+
+          const points =
+            MATCH_REWARD[isEasyMode ? "easy" : "difficult"][
+              errors === 0 ? "firstTry" : "afterError"
+            ];
+
+          setScore((prevScore) => {
+            const newScore = prevScore + points;
+            if (matches + 1 === CARD_IMAGES.length) {
+              clearInterval(timerRef.current);
+              handleWin(newScore);
+            }
+            return newScore;
+          });
+        } else {
+          newCards[firstIndex].flipped = false;
+          newCards[index].flipped = false;
+          setErrors((prev) => prev + 1);
+        }
+
+        isCheckingRef.current = false;
+        return newCards;
+      });
+    }, 350);
+  };
+
+  const RenderCard = ({ card, index }) => {
     return (
-      <Pressable key={index} onPress={() => handleCardPress(index)}>
-        <Animated.View
+      <Pressable onPress={() => handleCardPress(index)}>
+        <View
           style={[
             styles.card,
-            { transform: [{ rotateY }] },
             { backgroundColor: TILE_BG },
             { borderRightWidth: 2, borderBottomWidth: 2, borderColor: "#000" },
           ]}
         >
           <Image
-            source={isFace ? card.img : questionImg}
+            source={card.flipped || card.matched ? card.img : questionImg}
             style={styles.cardImage}
             resizeMode="contain"
           />
-        </Animated.View>
+        </View>
       </Pressable>
     );
   };
@@ -284,7 +252,8 @@ export default function GameScreen({ navigation, route }) {
     <View style={styles.container}>
       <Text style={styles.mode}>Mode: {isEasyMode ? "Easy" : "Difficult"}</Text>
       <Text style={styles.timer}>
-        Time: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+        Time: {Math.floor(timeLeft / 60)}:
+        {(timeLeft % 60).toString().padStart(2, "0")}
       </Text>
       <Text style={styles.score}>Score: {score}</Text>
 
@@ -309,7 +278,6 @@ const styles = StyleSheet.create({
   timer: { fontSize: 24, fontWeight: "bold", marginBottom: 10, color: "#fff" },
   score: { fontSize: 24, fontWeight: "bold", marginBottom: 20, color: "#fff" },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center" },
-
   card: {
     width: 70,
     height: 70,
@@ -318,7 +286,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 10,
     overflow: "hidden",
-    backfaceVisibility: "hidden",
   },
   cardImage: { width: 60, height: 60 },
 });
