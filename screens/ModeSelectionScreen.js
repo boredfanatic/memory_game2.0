@@ -1,4 +1,3 @@
-// screens/ModeSelectionScreen.js
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
@@ -12,14 +11,14 @@ export default function ModeSelectionScreen({ navigation }) {
       <Text style={styles.title}>Choose a Mode</Text>
 
       <TouchableOpacity
-        style={[styles.button, styles.easyButton]}
+        style={[styles.button]}
         onPress={() => handleModeSelect(true)}
       >
         <Text style={styles.buttonText}>Easy Mode</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, styles.hardButton]}
+        style={[styles.button]}
         onPress={() => handleModeSelect(false)}
       >
         <Text style={styles.buttonText}>Difficult Mode</Text>
@@ -48,12 +47,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     marginVertical: 15,
-  },
-  easyButton: {
-    backgroundColor: "#4CAF50",
-  },
-  hardButton: {
-    backgroundColor: "#F44336",
+    backgroundColor: "#3C0274",
   },
   buttonText: {
     fontSize: 20,

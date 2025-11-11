@@ -6,9 +6,13 @@
   <component name="ChangeListManager">
     <list default="true" id="ea314efd-2027-4662-8e99-ea1eec092228" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/CountdownScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/CountdownScreen.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/GameScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/GameScreen.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/LoseScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/LoseScreen.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/ModeSelectionScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/ModeSelectionScreen.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/StartScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/StartScreen.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/screens/TrophiesScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/TrophiesScreen.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/WinScreen.js" beforeDir="false" afterPath="$PROJECT_DIR$/screens/WinScreen.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

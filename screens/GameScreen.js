@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
+import { View, Text, Pressable, StyleSheet, Image, Animated } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Images
@@ -19,7 +19,6 @@ const MATCH_REWARD = {
   difficult: { firstTry: 30, afterError: 15 },
 };
 
-// Map cards to images
 const CARD_IMAGES = [
   { name: "Apple", img: appleImg },
   { name: "Fire Flower", img: fireFlowerImg },
@@ -28,6 +27,8 @@ const CARD_IMAGES = [
   { name: "Penguin", img: penguinImg },
   { name: "Swiss Cheese", img: swissCheeseImg },
 ];
+
+const TILE_BG = "#9A3EC6"; // Card back color
 
 function shuffleArray(array) {
   const arr = [...array, ...array];
@@ -40,7 +41,8 @@ function shuffleArray(array) {
 
 const THEORETICAL_MIN = {
   easy: () => BASE_SCORE - Math.floor(TOTAL_TIME / 10) * TIME_DEDUCTION.easy,
-  difficult: () => BASE_SCORE - Math.floor(TOTAL_TIME / 10) * TIME_DEDUCTION.difficult,
+  difficult: () =>
+    BASE_SCORE - Math.floor(TOTAL_TIME / 10) * TIME_DEDUCTION.difficult,
 };
 
 export default function GameScreen({ navigation, route }) {
@@ -53,17 +55,18 @@ export default function GameScreen({ navigation, route }) {
       ...value,
       flipped: false,
       matched: false,
+      anim: new Animated.Value(0),
     }))
   );
-  const [firstCard, setFirstCard] = useState(null);
-  const [secondCard, setSecondCard] = useState(null);
   const [matches, setMatches] = useState(0);
   const [errors, setErrors] = useState(0);
 
   const timerRef = useRef(null);
   const elapsedRef = useRef(0);
+  const firstCardRef = useRef(null);
+  const isCheckingRef = useRef(false);
+  const tapQueueRef = useRef([]); // store all taps
 
-  // Timer
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
@@ -75,90 +78,121 @@ export default function GameScreen({ navigation, route }) {
         const newTime = prev - 1;
         elapsedRef.current++;
         if (elapsedRef.current % 10 === 0) {
-          setScore((prevScore) => prevScore - TIME_DEDUCTION[isEasyMode ? "easy" : "difficult"]);
+          setScore((prevScore) =>
+            prevScore - TIME_DEDUCTION[isEasyMode ? "easy" : "difficult"]
+          );
         }
         return newTime;
       });
     }, 1000);
-
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // Handle card press
+  const flipCard = (card, toFront = true) => {
+    Animated.timing(card.anim, {
+      toValue: toFront ? 180 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // ----------------- INSTANT TAP QUEUE -----------------
   const handleCardPress = (index) => {
-    const card = cards[index];
-    if (card.flipped || card.matched || secondCard) return;
-
-    const newCards = [...cards];
-    newCards[index].flipped = true;
-    setCards(newCards);
-
-    if (!firstCard) {
-      setFirstCard({ ...card, index });
-    } else {
-      setSecondCard({ ...card, index });
-      setTimeout(() => checkMatch(firstCard.index, index), 700);
-    }
+    tapQueueRef.current.push(index); // store every tap immediately
+    processTapQueue();
   };
 
-  // Check match
-  const checkMatch = (index1, index2) => {
-    const newCards = [...cards];
-    const first = newCards[index1];
-    const second = newCards[index2];
-    const firstTry = errors === 0;
+  const processTapQueue = () => {
+    if (tapQueueRef.current.length === 0) return;
 
-    if (first.name === second.name) {
-      newCards[index1].matched = true;
-      newCards[index2].matched = true;
-      setMatches((prev) => prev + 1);
+    const index = tapQueueRef.current.shift();
+    const currentCards = [...cards];
+    const card = currentCards[index];
 
-      const points =
-        MATCH_REWARD[isEasyMode ? "easy" : "difficult"][firstTry ? "firstTry" : "afterError"];
-      setScore((prevScore) => prevScore + points);
+    if (!card || card.flipped || card.matched) {
+      processTapQueue(); // skip invalid card
+      return;
+    }
 
-      if (matches + 1 === CARD_IMAGES.length) {
-        clearInterval(timerRef.current);
-        handleWin(score + points);
+    // flip immediately
+    card.flipped = true;
+    setCards(currentCards);
+    flipCard(card, true);
+
+    // store first card if none selected
+    if (!firstCardRef.current) {
+      firstCardRef.current = { ...card, index };
+      processTapQueue(); // continue processing queue immediately
+      return;
+    }
+
+    // second card selected
+    isCheckingRef.current = true;
+    const first = firstCardRef.current;
+    firstCardRef.current = null;
+
+    setTimeout(() => {
+      const updated = [...currentCards];
+      const secondCard = updated[index];
+
+      if (first.name === secondCard.name) {
+        updated[first.index].matched = true;
+        updated[index].matched = true;
+        setMatches((prev) => prev + 1);
+
+        const points =
+          MATCH_REWARD[isEasyMode ? "easy" : "difficult"][
+            errors === 0 ? "firstTry" : "afterError"
+          ];
+
+        setScore((prevScore) => {
+          const newScore = prevScore + points;
+          if (matches + 1 === CARD_IMAGES.length) {
+            clearInterval(timerRef.current);
+            handleWin(newScore);
+          }
+          return newScore;
+        });
+      } else {
+        updated[first.index].flipped = false;
+        updated[index].flipped = false;
+        flipCard(updated[first.index], false);
+        flipCard(updated[index], false);
+        setErrors((prev) => prev + 1);
       }
-    } else {
-      newCards[index1].flipped = false;
-      newCards[index2].flipped = false;
-      setErrors((prev) => prev + 1);
-    }
 
-    setCards(newCards);
-    setFirstCard(null);
-    setSecondCard(null);
+      setCards(updated);
+      isCheckingRef.current = false;
+      processTapQueue(); // process next tap immediately
+    }, 400);
   };
 
-  // Win handler
   const handleWin = async (finalScore) => {
     clearInterval(timerRef.current);
-    await saveScore(finalScore, false);
+    const pendingUnlocks = await saveScore(finalScore, false);
     navigation.replace("Win", {
       finalScore,
       timeTaken: TOTAL_TIME - timeLeft,
       isDifficultMode: !isEasyMode,
+      pendingUnlocks,
     });
   };
 
-  // Lose handler
   const handleLose = async () => {
     clearInterval(timerRef.current);
     const mode = isEasyMode ? "easy" : "difficult";
     const expectedMin = THEORETICAL_MIN[mode]();
     const finalScore = Math.min(score, expectedMin);
     setScore(finalScore);
-    await saveScore(finalScore, true);
+    const pendingUnlocks = await saveScore(finalScore, true);
     navigation.replace("Lose", {
       finalScore,
       timeTaken: TOTAL_TIME,
       isDifficultMode: !isEasyMode,
+      pendingUnlocks,
     });
   };
 
-  // Save score and manage unlocks
   const saveScore = async (finalScore, isLose) => {
     try {
       const STORAGE_KEY = "@sticker_unlocks";
@@ -166,55 +200,84 @@ export default function GameScreen({ navigation, route }) {
 
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
       const state = raw ? JSON.parse(raw) : {};
-      const pendingRaw = await AsyncStorage.getItem(PENDING_KEY);
-      const pending = pendingRaw ? JSON.parse(pendingRaw) : [];
 
       state.easyScore = state.easyScore ?? 0;
       state.hardScore = state.hardScore ?? 0;
       state.lowestEasy = state.lowestEasy ?? Infinity;
       state.lowestDifficult = state.lowestDifficult ?? Infinity;
 
-      // Update mode scores
+      const pending = [];
+
       if (isEasyMode) {
         state.easyScore = Math.max(state.easyScore, finalScore);
         if (isLose && finalScore < state.lowestEasy) {
           state.lowestEasy = finalScore;
           state.lowestEasyAchieved = true;
-          pending.push("Penguin 🐧");
+          pending.push("penguin");
         }
       } else {
         state.hardScore = Math.max(state.hardScore, finalScore);
         if (isLose && finalScore < state.lowestDifficult) {
           state.lowestDifficult = finalScore;
           state.lowestDifficultAchieved = true;
-          pending.push("Ember Flower 🔥");
+          pending.push("ember_flower");
         }
       }
 
-      // Combined trophies with updated thresholds
       const combinedTrophies = [
-        { name: "Bronze", easyThreshold: 700, hardThreshold: 300 },
-        { name: "Silver", easyThreshold: 850, hardThreshold: 500 },
-        { name: "Gold", easyThreshold: 1000, hardThreshold: 750 },
-        { name: "Diamond", easyThreshold: 1150, hardThreshold: 1000 },
+        { key: "swiss_cheese", easyThreshold: 1000, hardThreshold: 800 },
+        { key: "apple", easyThreshold: 1080, hardThreshold: 880 },
+        { key: "kitty", easyThreshold: 1160, hardThreshold: 960 },
+        { key: "magic_wand", easyThreshold: 1200, hardThreshold: 1000 },
       ];
 
       combinedTrophies.forEach((t) => {
         if (
           (state.easyScore ?? 0) >= t.easyThreshold &&
           (state.hardScore ?? 0) >= t.hardThreshold &&
-          !state[t.name]
+          !state[t.key]
         ) {
-          state[t.name] = true;
-          pending.push(`${t.name} Trophy 🏆`);
+          state[t.key] = true;
+          pending.push(t.key);
         }
       });
 
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+
+      return pending;
     } catch (e) {
       console.warn("Failed to save score", e);
+      return [];
     }
+  };
+
+  const RenderCard = ({ card, index }) => {
+    const rotateY = card.anim.interpolate({
+      inputRange: [0, 180],
+      outputRange: ["0deg", "180deg"],
+    });
+
+    const isFace = card.flipped || card.matched;
+
+    return (
+      <Pressable key={index} onPress={() => handleCardPress(index)}>
+        <Animated.View
+          style={[
+            styles.card,
+            { transform: [{ rotateY }] },
+            { backgroundColor: TILE_BG },
+            { borderRightWidth: 2, borderBottomWidth: 2, borderColor: "#000" },
+          ]}
+        >
+          <Image
+            source={isFace ? card.img : questionImg}
+            style={styles.cardImage}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </Pressable>
+    );
   };
 
   return (
@@ -227,16 +290,7 @@ export default function GameScreen({ navigation, route }) {
 
       <View style={styles.grid}>
         {cards.map((card, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[styles.card, card.flipped || card.matched ? styles.cardFlipped : {}]}
-            onPress={() => handleCardPress(i)}
-          >
-            <Image
-              source={card.flipped || card.matched ? card.img : questionImg}
-              style={styles.cardImage}
-            />
-          </TouchableOpacity>
+          <RenderCard key={i} card={card} index={i} />
         ))}
       </View>
     </View>
@@ -255,15 +309,16 @@ const styles = StyleSheet.create({
   timer: { fontSize: 24, fontWeight: "bold", marginBottom: 10, color: "#fff" },
   score: { fontSize: 24, fontWeight: "bold", marginBottom: 20, color: "#fff" },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center" },
+
   card: {
     width: 70,
     height: 70,
-    backgroundColor: "#ddd",
     margin: 5,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
+    overflow: "hidden",
+    backfaceVisibility: "hidden",
   },
-  cardFlipped: { backgroundColor: "#fff" },
-  cardImage: { width: 70, height: 70, resizeMode: "contain" },
+  cardImage: { width: 60, height: 60 },
 });

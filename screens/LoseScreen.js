@@ -6,38 +6,20 @@ const STORAGE_KEY = "@sticker_unlocks";
 const PENDING_KEY = "@pending_unlocks";
 
 export default function LoseScreen({ navigation, route }) {
-  const { finalScore, timeTaken, isDifficultMode } = route.params;
+  const { finalScore, timeTaken, isDifficultMode, pendingUnlocks = [] } = route.params ?? {};
 
   useEffect(() => {
     const updateScores = async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         const state = raw ? JSON.parse(raw) : {};
-        const pendingRaw = await AsyncStorage.getItem(PENDING_KEY);
-        const pending = pendingRaw ? JSON.parse(pendingRaw) : [];
 
-        if (isDifficultMode) {
-          const lowest = state.lowestDifficult ?? Infinity;
-          if (finalScore < lowest) {
-            state.lowestDifficult = finalScore;
-            if (!state.lowestDifficultAchieved) {
-              state.lowestDifficultAchieved = true;
-              pending.push("Ember Flower 🔥");
-            }
-          }
-        } else {
-          const lowest = state.lowestEasy ?? Infinity;
-          if (finalScore < lowest) {
-            state.lowestEasy = finalScore;
-            if (!state.lowestEasyAchieved) {
-              state.lowestEasyAchieved = true;
-              pending.push("Penguin 🐧");
-            }
-          }
+        // Save pending unlocks but do not display them here
+        if (Array.isArray(pendingUnlocks) && pendingUnlocks.length > 0) {
+          await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pendingUnlocks));
         }
 
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending));
       } catch (e) {
         console.warn("Failed to update lose scores", e);
       }
@@ -68,7 +50,7 @@ const styles = StyleSheet.create({
   text: { fontSize: 24, marginVertical: 5, color: "#fff" },
   button: {
     marginTop: 30,
-    backgroundColor: "#230486",
+    backgroundColor: "#9A3EC6",
     padding: 15,
     borderRadius: 12,
     width: "60%",

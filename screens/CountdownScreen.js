@@ -1,4 +1,3 @@
-// screens/CountdownScreen.js
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, StatusBar } from 'react-native';
 import { Audio } from 'expo-av';
@@ -28,22 +27,25 @@ export default function CountdownScreen({ navigation, route }) {
 
     async function runCountdown() {
       if (!mounted) return;
+      // Hold "Get Ready!" for longer so it's visible
+      await delay(700);
+      if (!mounted) return;
       setDisplay('3');
-      await delay(1000);
+      await delay(900);
       if (!mounted) return;
       setDisplay('2');
-      await delay(1000);
+      await delay(900);
       if (!mounted) return;
       setDisplay('1');
-      await delay(1000);
+      await delay(900);
       if (!mounted) return;
       setDisplay('Start!');
-      await delay(800);
+      await delay(900);
       if (!mounted) return;
       navigation.replace('Game', { isEasyMode });
     }
 
-    delay(400).then(runCountdown);
+    runCountdown();
 
     return () => {
       mounted = false;
@@ -76,13 +78,11 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 96,
     color: '#fff',
-    fontFamily: 'IrishGrover',
     textAlign: 'center',
   },
   modeText: {
     marginTop: 16,
     fontSize: 18,
     color: '#fff',
-    fontFamily: 'IrishGrover',
   },
 });
