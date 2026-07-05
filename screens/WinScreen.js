@@ -1,9 +1,14 @@
 import React, { useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Text, TouchableOpacity, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import DiamondPattern from "../components/DiamondPattern";
 
 const STORAGE_KEY = "@sticker_unlocks";
 const PENDING_KEY = "@pending_unlocks";
+
+const BG_COLORS = ["#8FFFBE", "#3ABF7A"];
+const BTN_COLORS = ["#C75EE8", "#6B1F9A"];
 
 export default function WinScreen({ navigation, route }) {
   const { finalScore, timeTaken, isDifficultMode, pendingUnlocks = [] } = route.params ?? {};
@@ -20,7 +25,6 @@ export default function WinScreen({ navigation, route }) {
           state.easyScore = Math.max(state.easyScore ?? 0, finalScore);
         }
 
-        // Save pending unlocks (but don't display popups here)
         if (Array.isArray(pendingUnlocks) && pendingUnlocks.length > 0) {
           await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pendingUnlocks));
         }
@@ -35,18 +39,18 @@ export default function WinScreen({ navigation, route }) {
   }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: "#6DE2A0" }]}>
+    <LinearGradient colors={BG_COLORS} style={styles.container}>
+      <DiamondPattern />
       <Text style={styles.title}>You Won!</Text>
       <Text style={styles.text}>Score: {finalScore}</Text>
       <Text style={styles.text}>Time Taken: {timeTaken}s</Text>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate("Start")}
-      >
-        <Text style={styles.buttonText}>Back to Start</Text>
+      <TouchableOpacity onPress={() => navigation.navigate("Start")}>
+        <LinearGradient colors={BTN_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.button}>
+          <Text style={styles.buttonText}>Back to Start</Text>
+        </LinearGradient>
       </TouchableOpacity>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -56,10 +60,9 @@ const styles = StyleSheet.create({
   text: { fontSize: 24, marginVertical: 5, color: "#fff" },
   button: {
     marginTop: 30,
-    backgroundColor: "#9A3EC6",
     padding: 15,
     borderRadius: 12,
-    width: "60%",
+    width: 200,
     alignItems: "center",
   },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },

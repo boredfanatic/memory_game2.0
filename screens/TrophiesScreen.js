@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ConfettiCannon from "react-native-confetti-cannon";
+import { LinearGradient } from "expo-linear-gradient";
+import DiamondPattern from "../components/DiamondPattern";
 
 const STICKERS = [
   { key: "swiss_cheese", name: "Swiss Cheese", image: require("../assets/images/swiss_cheese.png"), type: "combined", easyThreshold: 1000, hardThreshold: 800, rank: "Bronze" },
@@ -27,19 +29,22 @@ const screenWidth = Dimensions.get("window").width;
 
 const STICKER_COLORS = {
   Diamond: "#00CCFF",
-  Gold: "#FFD700",
-  Silver: "#ECECEC",
-  Bronze: "#CD7F32",
+  Gold:    "#FFD700",
+  Silver:  "#ECECEC",
+  Bronze:  "#CD7F32",
   Special: "#4D0D89",
 };
+
+const BG_COLORS = ["#4A18C2", "#0E0240"];
+const BTN_COLORS = ["#C75EE8", "#6B1F9A"];
 
 export default function TrophiesScreen({ navigation }) {
   const [unlocks, setUnlocks] = useState({});
   const [animDone, setAnimDone] = useState({});
 
-  // Refs to trigger animation on stickers
   const animRefs = {};
   STICKERS.forEach((s) => (animRefs[s.key] = useRef(null)));
+  const pendingAnimQueue = useRef([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,17 +55,17 @@ export default function TrophiesScreen({ navigation }) {
       setUnlocks(unlockData);
       setAnimDone(animData);
 
-      // Determine newly unlocked stickers
       const newUnlocks = STICKERS.filter(
         (s) => isStickerUnlockedStatic(s, unlockData) && !animData[s.key]
       );
 
-      // Animate sequentially with 1.5s between stickers
-      newUnlocks.forEach((sticker, index) => {
+      // Queue all but the first; each animation triggers the next on completion
+      if (newUnlocks.length > 0) {
+        pendingAnimQueue.current = newUnlocks.slice(1);
         setTimeout(() => {
-          animRefs[sticker.key]?.current?.startUnlockAnimation();
-        }, index * 1500);
-      });
+          animRefs[newUnlocks[0].key]?.current?.startUnlockAnimation();
+        }, 300);
+      }
     };
     fetchData();
   }, []);
@@ -69,6 +74,14 @@ export default function TrophiesScreen({ navigation }) {
     const updated = { ...animDone, [key]: true };
     setAnimDone(updated);
     await AsyncStorage.setItem(ANIMATED_KEY, JSON.stringify(updated));
+
+    // Start the next queued animation once this one is fully saved
+    const next = pendingAnimQueue.current.shift();
+    if (next) {
+      setTimeout(() => {
+        animRefs[next.key]?.current?.startUnlockAnimation();
+      }, 500);
+    }
   };
 
   const isStickerUnlockedStatic = (sticker, unlockData) => {
@@ -95,7 +108,8 @@ export default function TrophiesScreen({ navigation }) {
       : STICKER_COLORS[sticker.rank] ?? "#000";
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={BG_COLORS} style={styles.container}>
+      <DiamondPattern />
       <Text style={styles.title}>Your Stickers</Text>
 
       <View style={styles.grid}>
@@ -116,7 +130,6 @@ export default function TrophiesScreen({ navigation }) {
       </View>
 
       <TouchableOpacity
-        style={styles.button}
         onPress={() => {
           Alert.alert(
             "Clear Progress",
@@ -136,20 +149,23 @@ export default function TrophiesScreen({ navigation }) {
           );
         }}
       >
-        <Text style={styles.buttonText}>Clear Progress</Text>
+        <LinearGradient colors={BTN_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.button}>
+          <Text style={styles.buttonText}>Clear Progress</Text>
+        </LinearGradient>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, { marginTop: 10 }]}
+        style={{ marginTop: 10 }}
         onPress={() => navigation.navigate("Start")}
       >
-        <Text style={styles.buttonText}>Back to Start</Text>
+        <LinearGradient colors={BTN_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.button}>
+          <Text style={styles.buttonText}>Back to Start</Text>
+        </LinearGradient>
       </TouchableOpacity>
-    </View>
+    </LinearGradient>
   );
 }
 
-// StickerCard component with sequential unlock animation
 const StickerCard = React.forwardRef(
   ({ sticker, unlocked, alreadyAnimated, onAnimationComplete, getStickerColor }, ref) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -158,12 +174,6 @@ const StickerCard = React.forwardRef(
     const [showConfetti, setShowConfetti] = useState(false);
 
     const [wasUnlocked, setWasUnlocked] = useState(alreadyAnimated);
-
-    useEffect(() => {
-      if (unlocked && !wasUnlocked && alreadyAnimated) {
-        setWasUnlocked(true);
-      }
-    }, []);
 
     React.useImperativeHandle(ref, () => ({
       startUnlockAnimation: () => {
@@ -238,7 +248,7 @@ const StickerCard = React.forwardRef(
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#230486", alignItems: "center", paddingTop: 50 },
+  container: { flex: 1, alignItems: "center", paddingTop: 50 },
   title: { fontSize: 28, fontWeight: "bold", marginBottom: 20, color: "#fff" },
   grid: {
     flexDirection: "row",
@@ -255,6 +265,6 @@ const styles = StyleSheet.create({
   stickerText: { fontWeight: "bold", fontSize: 14, textAlign: "center" },
   secretText: { fontSize: 13, fontWeight: "bold", marginTop: 1 },
   rankText: { fontSize: 13, fontWeight: "bold", marginTop: 1 },
-  button: { backgroundColor: "#9A3EC6", padding: 14, borderRadius: 12, marginTop: 10, width: "60%", alignItems: "center" },
+  button: { padding: 14, borderRadius: 12, width: 200, alignItems: "center" },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
 });

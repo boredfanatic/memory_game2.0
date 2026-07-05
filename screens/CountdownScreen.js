@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import { Text, StyleSheet, StatusBar } from 'react-native';
 import { Audio } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
+import DiamondPattern from '../components/DiamondPattern';
+
+const BG_COLORS = ['#4A18C2', '#0E0240'];
 
 export default function CountdownScreen({ navigation, route }) {
   const isEasyMode = route?.params?.isEasyMode ?? true;
@@ -27,7 +31,6 @@ export default function CountdownScreen({ navigation, route }) {
 
     async function runCountdown() {
       if (!mounted) return;
-      // Hold "Get Ready!" for longer so it's visible
       await delay(700);
       if (!mounted) return;
       setDisplay('3');
@@ -56,11 +59,12 @@ export default function CountdownScreen({ navigation, route }) {
   }, [navigation, route]);
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={BG_COLORS} style={styles.container}>
+      <DiamondPattern />
       <StatusBar barStyle="light-content" />
       <Text style={styles.countText}>{display}</Text>
       <Text style={styles.modeText}>{isEasyMode ? 'Easy Mode' : 'Difficult Mode'}</Text>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -71,7 +75,6 @@ function delay(ms) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#230486',
     justifyContent: 'center',
     alignItems: 'center',
   },

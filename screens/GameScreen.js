@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import { View, Text, Pressable, StyleSheet, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import DiamondPattern from "../components/DiamondPattern";
 
 // Images
 import appleImg from "../assets/images/apple.png";
@@ -28,7 +30,8 @@ const CARD_IMAGES = [
   { name: "Swiss Cheese", img: swissCheeseImg },
 ];
 
-const TILE_BG = "#9A3EC6";
+const BG_COLORS = ["#4A18C2", "#0E0240"];
+const TILE_COLORS = ["#C75EE8", "#6B1F9A"];
 
 function shuffleArray(array) {
   const arr = [...array, ...array];
@@ -64,6 +67,17 @@ export default function GameScreen({ navigation, route }) {
   const elapsedRef = useRef(0);
   const firstCardRef = useRef(null);
   const isCheckingRef = useRef(false);
+  const cardStateRef = useRef([]);
+
+  // Refs so useCallback closures always see the latest values
+  const matchesRef = useRef(0);
+  const errorsRef = useRef(0);
+  const timeLeftRef = useRef(TOTAL_TIME);
+  const scoreRef = useRef(BASE_SCORE);
+
+  useEffect(() => {
+    cardStateRef.current = cards.map((c) => ({ ...c }));
+  }, []);
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -74,11 +88,14 @@ export default function GameScreen({ navigation, route }) {
           return 0;
         }
         const newTime = prev - 1;
+        timeLeftRef.current = newTime;
         elapsedRef.current++;
         if (elapsedRef.current % 10 === 0) {
-          setScore((prevScore) =>
-            prevScore - TIME_DEDUCTION[isEasyMode ? "easy" : "difficult"]
-          );
+          setScore((prevScore) => {
+            const deducted = prevScore - TIME_DEDUCTION[isEasyMode ? "easy" : "difficult"];
+            scoreRef.current = deducted;
+            return deducted;
+          });
         }
         return newTime;
       });
@@ -91,7 +108,7 @@ export default function GameScreen({ navigation, route }) {
     const pendingUnlocks = await saveScore(finalScore, false);
     navigation.replace("Win", {
       finalScore,
-      timeTaken: TOTAL_TIME - timeLeft,
+      timeTaken: TOTAL_TIME - timeLeftRef.current,
       isDifficultMode: !isEasyMode,
       pendingUnlocks,
     });
@@ -101,7 +118,7 @@ export default function GameScreen({ navigation, route }) {
     clearInterval(timerRef.current);
     const mode = isEasyMode ? "easy" : "difficult";
     const expectedMin = THEORETICAL_MIN[mode]();
-    const finalScore = Math.min(score, expectedMin);
+    const finalScore = Math.min(scoreRef.current, expectedMin);
     setScore(finalScore);
     const pendingUnlocks = await saveScore(finalScore, true);
     navigation.replace("Lose", {
@@ -171,85 +188,77 @@ export default function GameScreen({ navigation, route }) {
     }
   };
 
-  // ------------------------ CARD PRESS ------------------------
-  const handleCardPress = (index) => {
+  const handleCardPress = useCallback((index) => {
     if (isCheckingRef.current) return;
 
-    setCards((prev) => {
-      const updated = [...prev];
-      const card = updated[index];
-      if (!card || card.flipped || card.matched) return prev;
-      updated[index] = { ...card, flipped: true };
-      return updated;
-    });
+    const localCards = cardStateRef.current;
+    const card = localCards[index];
+    if (!card || card.flipped || card.matched) return;
+
+    // Flip the tapped card immediately (new object so memo re-renders only this card)
+    const flippedCards = localCards.map((c, i) =>
+      i === index ? { ...c, flipped: true } : c
+    );
+    cardStateRef.current = flippedCards;
+    setCards(flippedCards);
 
     if (firstCardRef.current === null) {
       firstCardRef.current = index;
       return;
     }
 
+    // Second card tapped — evaluate right now, not inside a timeout
     isCheckingRef.current = true;
     const firstIndex = firstCardRef.current;
     firstCardRef.current = null;
 
-    setTimeout(() => {
-      setCards((prevNow) => {
-        const newCards = [...prevNow];
-        const firstCard = newCards[firstIndex];
-        const secondCard = newCards[index];
+    const firstCard = flippedCards[firstIndex];
+    const secondCard = flippedCards[index];
 
-        if (firstCard.name === secondCard.name) {
-          newCards[firstIndex].matched = true;
-          newCards[index].matched = true;
-          setMatches((m) => m + 1);
+    if (firstCard.name === secondCard.name) {
+      // MATCH: update state immediately, no 600ms wait
+      const matchedCards = flippedCards.map((c, i) =>
+        i === firstIndex || i === index ? { ...c, matched: true } : c
+      );
+      cardStateRef.current = matchedCards;
+      setCards(matchedCards);
 
-          const points =
-            MATCH_REWARD[isEasyMode ? "easy" : "difficult"][
-              errors === 0 ? "firstTry" : "afterError"
-            ];
+      matchesRef.current += 1;
+      setMatches(matchesRef.current);
 
-          setScore((prevScore) => {
-            const newScore = prevScore + points;
-            if (matches + 1 === CARD_IMAGES.length) {
-              clearInterval(timerRef.current);
-              handleWin(newScore);
-            }
-            return newScore;
-          });
-        } else {
-          newCards[firstIndex].flipped = false;
-          newCards[index].flipped = false;
-          setErrors((prev) => prev + 1);
-        }
+      const mode = isEasyMode ? "easy" : "difficult";
+      const points = MATCH_REWARD[mode][errorsRef.current === 0 ? "firstTry" : "afterError"];
+      const newScore = scoreRef.current + points;
+      scoreRef.current = newScore;
+      setScore(newScore);
 
+      if (matchesRef.current === CARD_IMAGES.length) {
+        // Stop timer EXACTLY when the last card is flipped — not a ms later
+        clearInterval(timerRef.current);
+        handleWin(newScore);
+      }
+
+      // Unlock immediately so the next pair can be tapped without delay
+      isCheckingRef.current = false;
+    } else {
+      // MISMATCH: show both wrong cards for 600ms then flip them back
+      setTimeout(() => {
+        const current = cardStateRef.current;
+        const unflipped = current.map((c, i) =>
+          i === firstIndex || i === index ? { ...c, flipped: false } : c
+        );
+        cardStateRef.current = unflipped;
+        setCards(unflipped);
+        errorsRef.current += 1;
+        setErrors(errorsRef.current);
         isCheckingRef.current = false;
-        return newCards;
-      });
-    }, 350);
-  };
-
-  const RenderCard = ({ card, index }) => {
-    return (
-      <Pressable onPress={() => handleCardPress(index)}>
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: TILE_BG },
-            { borderRightWidth: 2, borderBottomWidth: 2, borderColor: "#000" },
-          ]}
-        >
-          <Image
-            source={card.flipped || card.matched ? card.img : questionImg}
-            style={styles.cardImage}
-            resizeMode="contain"
-          />
-        </View>
-      </Pressable>
-    );
-  };
+      }, 600);
+    }
+  }, [isEasyMode]);
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={BG_COLORS} style={styles.container}>
+      <DiamondPattern />
       <Text style={styles.mode}>Mode: {isEasyMode ? "Easy" : "Difficult"}</Text>
       <Text style={styles.timer}>
         Time: {Math.floor(timeLeft / 60)}:
@@ -259,12 +268,32 @@ export default function GameScreen({ navigation, route }) {
 
       <View style={styles.grid}>
         {cards.map((card, i) => (
-          <RenderCard key={i} card={card} index={i} />
+          <RenderCard key={i} card={card} index={i} onPress={handleCardPress} />
         ))}
       </View>
-    </View>
+    </LinearGradient>
   );
 }
+
+const RenderCard = memo(({ card, index, onPress }) => (
+  <Pressable onPressIn={() => onPress(index)}>
+    <LinearGradient
+      colors={TILE_COLORS}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={[
+        styles.card,
+        { borderRightWidth: 2, borderBottomWidth: 2, borderColor: "#000" },
+      ]}
+    >
+      <Image
+        source={card.flipped || card.matched ? card.img : questionImg}
+        style={styles.cardImage}
+        resizeMode="contain"
+      />
+    </LinearGradient>
+  </Pressable>
+));
 
 const styles = StyleSheet.create({
   container: {
@@ -272,7 +301,6 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#230486",
   },
   mode: { fontSize: 20, fontWeight: "bold", marginBottom: 8, color: "#fff" },
   timer: { fontSize: 24, fontWeight: "bold", marginBottom: 10, color: "#fff" },

@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import DiamondPattern from "../components/DiamondPattern";
 
 const PENDING_KEY = "@pending_unlocks";
 
@@ -14,7 +16,8 @@ const TROPHY_FRIENDLY = {
   ember_flower: { rank: "Secret", emoji: "🔥" },
 };
 
-const BUTTON_COLOR = "#9A3EC6";
+const BG_COLORS = ["#4A18C2", "#0E0240"];
+const BTN_COLORS = ["#C75EE8", "#6B1F9A"];
 
 export default function StartScreen() {
   const navigation = useNavigation();
@@ -91,26 +94,25 @@ export default function StartScreen() {
     : "🏆 New Unlock!";
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={BG_COLORS} style={styles.container}>
+      <DiamondPattern />
       <Text style={styles.title}>The Memory Game</Text>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate("ModeSelection")}
-      >
-        <Text style={styles.buttonText}>Start</Text>
+      <TouchableOpacity onPress={() => navigation.navigate("ModeSelection")}>
+        <LinearGradient colors={BTN_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.button}>
+          <Text style={styles.buttonText}>Start</Text>
+        </LinearGradient>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate("Trophies")}
-      >
-        <Text style={styles.buttonText}>Trophies</Text>
+      <TouchableOpacity onPress={() => navigation.navigate("Trophies")}>
+        <LinearGradient colors={BTN_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.button}>
+          <Text style={styles.buttonText}>Trophies</Text>
+        </LinearGradient>
       </TouchableOpacity>
 
       {popupVisible && (
         <Animated.View style={[modalStyles.overlay, { opacity: fadeAnim }]}>
-          <View style={[modalStyles.popup, { backgroundColor: BUTTON_COLOR }]}>
+          <LinearGradient colors={BTN_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={modalStyles.popup}>
             <TouchableOpacity style={modalStyles.close} onPress={handleDismiss}>
               <Text style={modalStyles.closeText}>✖</Text>
             </TouchableOpacity>
@@ -121,17 +123,17 @@ export default function StartScreen() {
             <TouchableOpacity style={modalStyles.okButton} onPress={handleDismiss}>
               <Text style={modalStyles.okText}>OK</Text>
             </TouchableOpacity>
-          </View>
+          </LinearGradient>
         </Animated.View>
       )}
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#230486", justifyContent: "center", alignItems: "center", padding: 20 },
+  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   title: { fontSize: 36, fontWeight: "bold", color: "white", marginBottom: 60 },
-  button: { backgroundColor: BUTTON_COLOR, paddingVertical: 16, paddingHorizontal: 40, borderRadius: 12, marginVertical: 10 },
+  button: { paddingVertical: 16, paddingHorizontal: 40, borderRadius: 12, marginVertical: 10, minWidth: 160, alignItems: "center" },
   buttonText: { fontSize: 20, color: "white", fontWeight: "bold" },
 });
 
